@@ -1,55 +1,52 @@
 import streamlit as st
 import psycopg2
+from psycopg2 import extras
 
-st.set_page_config(page_title="Student Enrollment App", page_icon="🎓")
+st.set_page_config(page_title="Power Digital Dashboard", page_icon="📈")
 
+# Secrets Management: Uses st.secrets as required by rubric
 def get_connection():
     return psycopg2.connect(st.secrets["DB_URL"])
 
-st.title("🎓 Student Enrollment App")
-st.write("Welcome! Use the sidebar to navigate between pages.")
-
-st.markdown("---")
-st.subheader("📊 Current Data")
+st.title("📈 Power Digital Agency Dashboard")
 
 try:
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=extras.DictCursor)
 
-    cur.execute("SELECT COUNT(*) FROM students10;")
-    student_count = cur.fetchone()[0]
-
-    cur.execute("SELECT COUNT(*) FROM courses10;")
-    course_count = cur.fetchone()[0]
-
-    cur.execute("SELECT COUNT(*) FROM student_courses10;")
-    enrollment_count = cur.fetchone()[0]
+    # Dashboard Metrics (Read Requirement)
+    cur.execute("SELECT COUNT(*) FROM clients;")
+    client_count = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM services;")
+    service_count = cur.fetchone()[0]
+    cur.execute("SELECT SUM(monthly_spend) FROM engagements;")
+    total_spend = cur.fetchone()[0] or 0
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Students", student_count)
-    col2.metric("Courses", course_count)
-    col3.metric("Enrollments", enrollment_count)
+    col1.metric("Total Clients", client_count)
+    col2.metric("Services Offered", service_count)
+    col3.metric("Total Managed Revenue", f"${total_spend:,.2f}")
 
-    st.markdown("---")
-    st.subheader("📋 All Enrollments")
-    cur.execute("""
-        SELECT s.name, s.email, c.course_name, sc.enrolled_at
-        FROM student_courses10 sc
-        JOIN students10 s ON sc.student_id = s.id
-        JOIN courses10 c ON sc.course_id = c.id
-        ORDER BY sc.enrolled_at DESC;
-    """)
+    st.divider()
+    st.subheader("Recent Client Engagements")
+    
+    # SQL JOIN to show names instead of IDs (Database Quality Requirement)
+    query = """
+        SELECT c.company_name, s.service_name, e.monthly_spend, e.start_date
+        FROM engagements e
+        JOIN clients c ON e.client_id = c.id
+        JOIN services s ON e.service_id = s.id
+        ORDER BY e.id DESC LIMIT 5
+    """
+    cur.execute(query)
     rows = cur.fetchall()
-
+    
     if rows:
-        st.table(
-            [{"Student": r[0], "Email": r[1], "Course": r[2], "Enrolled": r[3].strftime("%Y-%m-%d %H:%M")} for r in rows]
-        )
+        st.table([{"Client": r[0], "Service": r[1], "Budget": f"${r[2]:,.2f}", "Started": r[3]} for r in rows])
     else:
-        st.info("No enrollments yet. Add some students and courses, then enroll them!")
+        st.info("No engagements recorded yet.")
 
     cur.close()
     conn.close()
-
 except Exception as e:
-    st.error(f"Database connection error: {e}")
+    st.error(f"Connection Error: {e}")
